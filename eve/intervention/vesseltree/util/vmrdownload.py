@@ -1,6 +1,9 @@
 import os
 import logging
+import sys
 import requests
+import shutil
+import wget
 
 logger = logging.getLogger("VMR_Download")
 
@@ -15,17 +18,10 @@ def download_vmr_files(model: str) -> str:
     path_vmr = os.path.join(path_data, "vmr")
     path_model = os.path.join(path_vmr, model)
 
-    if os.path.exists(path_model):
-        log_text = f"{model} folder found at {path_model}. Not Downloading again."
-        logger.info(log_text)
-        return path_model
-
     if not os.path.exists(path_data):
         os.mkdir(path_data)
     if not os.path.exists(path_vmr):
         os.mkdir(path_vmr)
-    if not os.path.exists(path_model):
-        os.mkdir(path_model)
 
     logger.info(
         "Downloading vascular models from https://vascularmodel.com/. Please cite appropriately when using for publications."
@@ -34,80 +30,29 @@ def download_vmr_files(model: str) -> str:
     info_log = f"Downloading {model} to {path_model}"
     logger.info(info_log)
 
-    license_url = f"https://vascularmodel.com/svprojects/{model}/LICENSE"
-    pdf_Url = f"https://vascularmodel.com/svprojects/{model}/{model}.pdf"
-    path_LICENSE = os.path.join(path_model, "LICENSE")
-    if not os.path.isfile(path_LICENSE):
-        logger.info("Downloading License")
-        _download(license_url, path_LICENSE)
-    path_pdf = os.path.join(path_model, f"{model}.pdf")
-    if not os.path.isfile(path_pdf):
-        logger.info("Downloading overview pdf")
-        _download(pdf_Url, path_pdf)
+    model_zip_url = f"https://www.vascularmodel.com/svprojects/{model}.zip"
+    model_zip_path = os.path.join(path_vmr, f"{model}.zip")
+    if not os.path.exists(model_zip_path):
+        _download(model_zip_url, model_zip_path)
 
+    shutil.unpack_archive(model_zip_path, path_vmr)
     path_model_mesh = os.path.join(path_model, "Meshes")
-    if not os.path.exists(path_model_mesh):
-        os.mkdir(path_model_mesh)
 
-    meshes_url = f"https://vascularmodel.com/svprojects/{model}/Meshes/"
-
-    data = requests.get(meshes_url, timeout=10)
-    text = data.text
-
-    vtp_mesh = text.find(".vtp")
-    start = text.find('">', vtp_mesh) + 2
-    end = text.find("</a>", vtp_mesh)
-    vtp_mesh = text[start:end]
-    vtp_url = meshes_url + vtp_mesh
-
-    vtu_mesh = text.find(".vtu")
-    start = text.find('">', vtu_mesh) + 2
-    end = text.find("</a>", vtu_mesh)
-    vtu_mesh = text[start:end]
-    vtu_url = meshes_url + vtu_mesh
-
-    vtp_path = os.path.join(path_model_mesh, model + ".vtp")
-    vtu_path = os.path.join(path_model_mesh, model + ".vtu")
-    if not os.path.isfile(vtp_path):
-        logger.info("Downloading vtp mesh")
-        _download(vtp_url, vtp_path)
-    if not os.path.isfile(vtu_path):
-        logger.info("Downloading vtu mesh")
-        _download(vtu_url, vtu_path)
-
-    paths_url = f"https://vascularmodel.com/svprojects/{model}/Paths/"
-    data = requests.get(paths_url, timeout=10)
-    text = data.text
-
-    arterie_names = []
-    while ".pth" in text:
-        first_pth = text.find(".pth")
-        start = text.find('">', first_pth) + 2
-        end = text.find("</a>", first_pth)
-        arterie_names.append(text[start:end])
-        text = text[end:]
-    path_paths = os.path.join(path_model, "Paths")
-    if not os.path.exists(path_paths):
-        os.mkdir(path_paths)
-
-    for artery in arterie_names:
-        artery_path = os.path.join(path_paths, artery)
-        if not os.path.isfile(artery_path):
-            info_log = f"Downloading {artery}"
+    for filename in os.listdir(path_model_mesh):
+        old_path = os.path.join(path_model_mesh, filename)
+        _, extension = os.path.splitext(filename)
+        new_path = os.path.join(path_model_mesh, f"{model}{extension}")
+        if not os.path.isfile(new_path):
+            info_log = f"Creating {model}{extension} in {path_model_mesh}"
             logger.info(info_log)
-            arterie_url = paths_url + artery
-            _download(
-                arterie_url,
-                artery_path,
-            )
+            shutil.copyfile(old_path, new_path)
+        else:
+            debug_log = f"{model}{extension} already exists in {path_model_mesh}."
+            logger.debug(debug_log)
 
-    info_log = f"Download of {model} finished."
-    logger.info(info_log)
     return path_model
 
 
-def _download(vtu_url, vtu_path):
-    data = requests.get(vtu_url, timeout=60)
-    with open(vtu_path, "wb") as file:
-        file.write(data.content)
-    del data
+def _download(url, local_path):
+    wget.download(url, local_path)
+    
