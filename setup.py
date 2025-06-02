@@ -26,5 +26,6 @@ setup(
         "opencv-python",
         "gymnasium",
         "pyyaml",
+        "wget"
     ],
 )
