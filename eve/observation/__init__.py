@@ -12,5 +12,7 @@ from .trackingdevice2d import TrackingDevice2D
 from .insertionlengths import InsertionLengths
 from .insertionlengthrelative import InsertionLengthRelative
 from .image import Image
+from .centerlines2d import Centerlines2D  # NEW: Centerline observation
+from .localguidance import LocalGuidance
 
 from . import wrapper, imagewrapper

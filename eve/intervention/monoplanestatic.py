@@ -38,6 +38,11 @@ class MonoPlaneStatic(SimulatedIntervention):
         self.last_action = np.zeros_like(self.velocity_limits)
         self._device_lengths_inserted = self.simulation.inserted_lengths
         self._device_rotations = self.simulation.rotations
+        
+        # Action masking tracking for diagnostics
+        self.last_cmd_action = np.zeros_like(self.velocity_limits)  # Before masking
+        self.last_exec_action = np.zeros_like(self.velocity_limits)  # After masking
+        self.last_mask_reasons: List[str] = ["none"] * len(self.devices)  # Per device
 
     @property
     def device_lengths_inserted(self) -> List[float]:
@@ -76,21 +81,43 @@ class MonoPlaneStatic(SimulatedIntervention):
             action = np.clip(action, -self.velocity_limits, self.velocity_limits)
             self.last_action = action
 
+        # Store commanded action before masking
+        self.last_cmd_action = action.copy()
+        
+        # Initialize mask reasons
+        mask_reasons = ["none"] * len(self.devices)
+
         inserted_lengths = np.array(self.device_lengths_inserted)
         max_lengths = np.array(self.device_lengths_maximum)
         duration = 1 / self.fluoroscopy.image_frequency
-        mask = np.where(inserted_lengths + action[:, 0] * duration <= 0.0)
-        action[mask, 0] = 0.0
-        mask = np.where(inserted_lengths + action[:, 0] * duration >= max_lengths)
-        action[mask, 0] = 0.0
+        
+        # Mask: prevent retracting below zero
+        below_zero_mask = inserted_lengths + action[:, 0] * duration <= 0.0
+        for i in np.where(below_zero_mask)[0]:
+            action[i, 0] = 0.0
+            mask_reasons[i] = "below_zero"
+        
+        # Mask: prevent inserting beyond max length
+        max_length_mask = inserted_lengths + action[:, 0] * duration >= max_lengths
+        for i in np.where(max_length_mask)[0]:
+            action[i, 0] = 0.0
+            mask_reasons[i] = "max_length"
+        
+        # Mask: prevent insertion at tree end
         tip = self.simulation.dof_positions[0]
         if self.stop_device_at_tree_end and at_tree_end(tip, self.vessel_tree):
             max_length = max(inserted_lengths)
             if max_length > 10:
                 dist_to_longest = -1 * inserted_lengths + max_length
                 movement = action[:, 0] * duration
-                mask = movement > dist_to_longest
-                action[mask, 0] = 0.0
+                tree_end_mask = movement > dist_to_longest
+                for i in np.where(tree_end_mask)[0]:
+                    action[i, 0] = 0.0
+                    mask_reasons[i] = "tree_end"
+
+        # Store executed action after masking
+        self.last_exec_action = action.copy()
+        self.last_mask_reasons = mask_reasons
 
         self.vessel_tree.step()
         self.simulation.step(action, duration)
@@ -122,6 +149,9 @@ class MonoPlaneStatic(SimulatedIntervention):
         self.target.reset(episode_number, target_seed)
         self.fluoroscopy.reset(episode_number)
         self.last_action *= 0.0
+        self.last_cmd_action *= 0.0
+        self.last_exec_action *= 0.0
+        self.last_mask_reasons = ["none"] * len(self.devices)
 
     def _update_states(self):
         self._device_lengths_inserted = self.simulation.inserted_lengths

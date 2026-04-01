@@ -9,3 +9,5 @@ from .pathlengthdelta import PathLengthDelta
 from .step import Step
 from .targetreached import TargetReached
 from .tiptotargetdistdelta import TipToTargetDistDelta
+from .waypointprogress import CenterlineWaypointProgress
+from .arclengthprogress import ArcLengthProgress
