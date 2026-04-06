@@ -29,7 +29,7 @@ class MonoPlaneStatic(SimulatedIntervention):
         self.target = target
         self.fluoroscopy = fluoroscopy
         self.stop_device_at_tree_end = stop_device_at_tree_end
-        self.normlaize_action = normalize_action
+        self.normalize_action = normalize_action
         self.simulation = simulation
         self._np_random = np.random.default_rng()
 
@@ -38,11 +38,11 @@ class MonoPlaneStatic(SimulatedIntervention):
         )
         # Asymmetric lower bounds: defaults to -velocity_limits if not provided
         if velocity_limit_low is not None:
-            self.velocity_limits_low = np.array(velocity_limit_low).reshape(
+            self.velocity_limit_low = np.array(velocity_limit_low).reshape(
                 self.velocity_limits.shape
             )
         else:
-            self.velocity_limits_low = -self.velocity_limits
+            self.velocity_limit_low = -self.velocity_limits
         self.last_action = np.zeros_like(self.velocity_limits)
         self._device_lengths_inserted = self.simulation.inserted_lengths
         self._device_rotations = self.simulation.rotations
@@ -75,7 +75,7 @@ class MonoPlaneStatic(SimulatedIntervention):
             space = gym.spaces.Box(low=-high, high=high)
         else:
             space = gym.spaces.Box(
-                low=self.velocity_limits_low, high=self.velocity_limits
+                low=self.velocity_limit_low, high=self.velocity_limits
             )
         return space
 
@@ -85,10 +85,10 @@ class MonoPlaneStatic(SimulatedIntervention):
             action = np.clip(action, -1.0, 1.0)
             self.last_action = action
             high = self.velocity_limits
-            low = self.velocity_limits_low
+            low = self.velocity_limit_low
             action = (action + 1) / 2 * (high - low) + low
         else:
-            action = np.clip(action, self.velocity_limits_low, self.velocity_limits)
+            action = np.clip(action, self.velocity_limit_low, self.velocity_limits)
             self.last_action = action
 
         # Store commanded action before masking
